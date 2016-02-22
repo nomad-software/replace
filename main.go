@@ -9,44 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/fatih/color"
 )
-
-func processPath(fullPath string, options *cliOptions) {
-	defer wg.Done()
-
-	contents, err := ioutil.ReadFile(fullPath)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return
-	}
-
-	newContents := strings.Replace(string(contents), options.from, options.to, -1)
-	if newContents != string(contents) {
-
-		err = ioutil.WriteFile(fullPath, []byte(newContents), 0)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return
-		}
-
-		fmt.Println(fullPath)
-	}
-}
-
-func handlePath(fullPath string, options *cliOptions) {
-	defer wg.Done()
-
-	matched, err := filepath.Match(options.file, path.Base(fullPath))
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return
-	}
-
-	if matched {
-		wg.Add(1)
-		go processPath(fullPath, options)
-	}
-}
 
 type cliOptions struct {
 	dir  string
@@ -56,7 +21,31 @@ type cliOptions struct {
 	help bool
 }
 
+func (this cliOptions) valid() bool {
+	return this.from != "" && this.to != ""
+}
+
+func (this cliOptions) display() {
+	options := color.CyanString("replacing:   ")
+	options += color.GreenString("%s\n", this.from)
+	options += color.CyanString("with:        ")
+	options += color.GreenString("%s\n", this.to)
+	options += color.CyanString("in files:    ")
+	options += color.GreenString("%s\n", this.file)
+	options += color.CyanString("starting in: ")
+	options += color.GreenString("%s\n", this.dir)
+	fmt.Print(options)
+}
+
 var wg sync.WaitGroup
+var banner string = ` ____            _
+|  _ \ ___ _ __ | | __ _  ___ ___
+| |_) / _ \ '_ \| |/ _' |/ __/ _ \
+|  _ <  __/ |_) | | (_| | (_|  __/
+|_| \_\___| .__/|_|\__'_|\___\___|
+          |_|
+
+`
 
 func main() {
 
@@ -69,10 +58,13 @@ func main() {
 	flag.BoolVar(&options.help, "help", false, "Show help.")
 	flag.Parse()
 
-	if (options.from == "" && options.to == "") || options.help {
+	if (!options.valid()) || options.help {
+		color.Cyan(banner)
 		flag.Usage()
 
 	} else {
+		options.display()
+
 		err := filepath.Walk(options.dir, func(fullPath string, info os.FileInfo, err error) error {
 
 			if err != nil {
@@ -90,10 +82,47 @@ func main() {
 		})
 
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			fmt.Fprintln(os.Stderr, color.RedString(err.Error()))
 			return
 		}
 
 		wg.Wait()
+	}
+}
+
+func processPath(fullPath string, options *cliOptions) {
+	defer wg.Done()
+
+	contents, err := ioutil.ReadFile(fullPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, color.RedString(err.Error()))
+		return
+	}
+
+	newContents := strings.Replace(string(contents), options.from, options.to, -1)
+	if newContents != string(contents) {
+
+		err = ioutil.WriteFile(fullPath, []byte(newContents), 0)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, color.RedString(err.Error()))
+			return
+		}
+
+		color.Magenta(fullPath)
+	}
+}
+
+func handlePath(fullPath string, options *cliOptions) {
+	defer wg.Done()
+
+	matched, err := filepath.Match(options.file, path.Base(fullPath))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, color.RedString(err.Error()))
+		return
+	}
+
+	if matched {
+		wg.Add(1)
+		go processPath(fullPath, options)
 	}
 }
