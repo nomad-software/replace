@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/fatih/color"
+	"github.com/mitchellh/go-homedir"
 )
 
 type cliOptions struct {
@@ -21,11 +22,16 @@ type cliOptions struct {
 	help bool
 }
 
-func (this cliOptions) valid() bool {
+func (this *cliOptions) valid() bool {
 	return this.from != "" && this.to != ""
 }
 
-func (this cliOptions) display() {
+func (this *cliOptions) expandDir() {
+	dir, _ := homedir.Expand(this.dir)
+	this.dir = dir
+}
+
+func (this *cliOptions) display() {
 	options := color.CyanString("replacing:   ")
 	options += color.GreenString("%s\n", this.from)
 	options += color.CyanString("with:        ")
@@ -63,6 +69,7 @@ func main() {
 		flag.Usage()
 
 	} else {
+		options.expandDir()
 		options.display()
 
 		err := filepath.Walk(options.dir, func(fullPath string, info os.FileInfo, err error) error {
