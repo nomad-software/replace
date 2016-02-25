@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/fatih/color"
 	"github.com/mitchellh/go-homedir"
@@ -26,11 +27,6 @@ func (this *cliOptions) valid() bool {
 	return this.from != "" && this.to != ""
 }
 
-func (this *cliOptions) expandDir() {
-	dir, _ := homedir.Expand(this.dir)
-	this.dir = dir
-}
-
 func (this *cliOptions) display() {
 	options := color.CyanString("replacing:   ")
 	options += color.GreenString("%s\n", this.from)
@@ -43,8 +39,19 @@ func (this *cliOptions) display() {
 	fmt.Print(options)
 }
 
-var wg sync.WaitGroup
-var banner string = ` ____            _
+func (this *cliOptions) parse() {
+	flag.StringVar(&this.dir, "dir", ".", "The directory to traverse.")
+	flag.StringVar(&this.from, "from", "", "The text to replace.")
+	flag.StringVar(&this.to, "to", "", "The replacement text.")
+	flag.StringVar(&this.file, "file", "*", "The glob file pattern to match.")
+	flag.BoolVar(&this.help, "help", false, "Show help.")
+	flag.Parse()
+	dir, _ := homedir.Expand(this.dir)
+	this.dir = dir
+}
+
+func (this *cliOptions) usage() {
+	var banner string = ` ____            _
 |  _ \ ___ _ __ | | __ _  ___ ___
 | |_) / _ \ '_ \| |/ _' |/ __/ _ \
 |  _ <  __/ |_) | | (_| | (_|  __/
@@ -52,53 +59,41 @@ var banner string = ` ____            _
           |_|
 
 `
+	color.Cyan(banner)
+	flag.Usage()
+}
 
-func main() {
+type fileHandler struct {
+	options *cliOptions
+	wg      sync.WaitGroup
+	total   int64
+}
 
-	var options cliOptions
+func (this *fileHandler) count() {
+	atomic.AddInt64(&this.total, 1)
+}
 
-	flag.StringVar(&options.dir, "dir", ".", "The directory to traverse.")
-	flag.StringVar(&options.from, "from", "", "The text to replace.")
-	flag.StringVar(&options.to, "to", "", "The replacement text.")
-	flag.StringVar(&options.file, "file", "*", "The glob file pattern to match.")
-	flag.BoolVar(&options.help, "help", false, "Show help.")
-	flag.Parse()
+func (this *fileHandler) init(options *cliOptions) {
+	this.options = options
+}
 
-	if (!options.valid()) || options.help {
-		color.Cyan(banner)
-		flag.Usage()
+func (this *fileHandler) handlePath(fullPath string) {
+	defer this.wg.Done()
 
-	} else {
-		options.expandDir()
-		options.display()
+	matched, err := filepath.Match(this.options.file, path.Base(fullPath))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, color.RedString(err.Error()))
+		return
+	}
 
-		err := filepath.Walk(options.dir, func(fullPath string, info os.FileInfo, err error) error {
-
-			if err != nil {
-				return err
-			}
-
-			if info.IsDir() {
-				return nil
-			}
-
-			wg.Add(1)
-			go handlePath(fullPath, &options)
-
-			return nil
-		})
-
-		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString(err.Error()))
-			return
-		}
-
-		wg.Wait()
+	if matched {
+		this.wg.Add(1)
+		go this.processPath(fullPath)
 	}
 }
 
-func processPath(fullPath string, options *cliOptions) {
-	defer wg.Done()
+func (this *fileHandler) processPath(fullPath string) {
+	defer this.wg.Done()
 
 	contents, err := ioutil.ReadFile(fullPath)
 	if err != nil {
@@ -106,7 +101,7 @@ func processPath(fullPath string, options *cliOptions) {
 		return
 	}
 
-	newContents := strings.Replace(string(contents), options.from, options.to, -1)
+	newContents := strings.Replace(string(contents), this.options.from, this.options.to, -1)
 	if newContents != string(contents) {
 
 		err = ioutil.WriteFile(fullPath, []byte(newContents), 0)
@@ -115,21 +110,50 @@ func processPath(fullPath string, options *cliOptions) {
 			return
 		}
 
+		this.count()
 		color.Magenta(fullPath)
 	}
 }
 
-func handlePath(fullPath string, options *cliOptions) {
-	defer wg.Done()
+func (this *fileHandler) walk() error {
+	return filepath.Walk(this.options.dir, func(fullPath string, info os.FileInfo, err error) error {
 
-	matched, err := filepath.Match(options.file, path.Base(fullPath))
-	if err != nil {
-		fmt.Fprintln(os.Stderr, color.RedString(err.Error()))
-		return
-	}
+		if err != nil {
+			return err
+		}
 
-	if matched {
-		wg.Add(1)
-		go processPath(fullPath, options)
+		if info.IsDir() {
+			return nil
+		}
+
+		this.wg.Add(1)
+		go this.handlePath(fullPath)
+
+		return nil
+	})
+}
+
+func main() {
+
+	var options cliOptions
+	options.parse()
+
+	var files fileHandler
+	files.init(&options)
+
+	if (!options.valid()) || options.help {
+		options.usage()
+
+	} else {
+		options.display()
+		err := files.walk()
+
+		if err != nil {
+			fmt.Fprintln(os.Stderr, color.RedString(err.Error()))
+			return
+		}
+
+		files.wg.Wait()
+		fmt.Printf("%d file(s) updated\n", files.total)
 	}
 }
