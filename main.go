@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/fatih/color"
 	"github.com/mitchellh/go-homedir"
@@ -27,7 +26,7 @@ func (this *cliOptions) valid() bool {
 	return this.from != "" && this.to != ""
 }
 
-func (this *cliOptions) display() {
+func (this *cliOptions) echo() {
 	options := color.CyanString("replacing:   ")
 	options += color.GreenString("%s\n", this.from)
 	options += color.CyanString("with:        ")
@@ -67,14 +66,23 @@ type fileHandler struct {
 	options *cliOptions
 	wg      sync.WaitGroup
 	total   int64
-}
-
-func (this *fileHandler) count() {
-	atomic.AddInt64(&this.total, 1)
+	output  chan string
+	done    chan bool
 }
 
 func (this *fileHandler) init(options *cliOptions) {
 	this.options = options
+	this.output = make(chan string)
+	this.done = make(chan bool)
+}
+
+func (this *fileHandler) processOutput() {
+	for path := range this.output {
+		this.total++
+		color.Magenta(path)
+	}
+	fmt.Printf("%d file(s) updated\n", this.total)
+	this.done <- true
 }
 
 func (this *fileHandler) handlePath(fullPath string) {
@@ -110,8 +118,7 @@ func (this *fileHandler) processPath(fullPath string) {
 			return
 		}
 
-		this.count()
-		color.Magenta(fullPath)
+		this.output <- fullPath
 	}
 }
 
@@ -140,12 +147,13 @@ func main() {
 
 	var files fileHandler
 	files.init(&options)
+	go files.processOutput()
 
 	if (!options.valid()) || options.help {
 		options.usage()
 
 	} else {
-		options.display()
+		options.echo()
 		err := files.walk()
 
 		if err != nil {
@@ -154,6 +162,8 @@ func main() {
 		}
 
 		files.wg.Wait()
-		fmt.Printf("%d file(s) updated\n", files.total)
+
+		close(files.output)
+		<-files.done
 	}
 }
