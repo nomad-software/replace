@@ -22,8 +22,8 @@ type Handler struct {
 func (this *Handler) Init(options *cli.Options) {
 	this.Options = options
 	this.Output = &cli.Output{
-		make(chan string),
-		make(chan bool),
+		Console: make(chan string),
+		Closed:  make(chan bool),
 	}
 }
 
