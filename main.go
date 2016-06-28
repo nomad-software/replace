@@ -16,13 +16,15 @@ func main() {
 
 	var file file.Handler
 	file.Init(&options)
-	go file.Output.Process()
 
 	if (!options.Valid()) || options.Help {
 		options.Usage()
 
 	} else {
 		options.Echo()
+
+		go file.Output.Process()
+
 		err := file.Walk()
 
 		if err != nil {
