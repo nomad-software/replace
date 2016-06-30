@@ -3,6 +3,7 @@ package cli
 import (
 	"flag"
 	"fmt"
+	"os"
 
 	"github.com/fatih/color"
 	"github.com/mitchellh/go-homedir"
@@ -17,7 +18,18 @@ type Options struct {
 }
 
 func (this *Options) Valid() bool {
-	return this.From != "" && this.To != ""
+
+	if this.From == "" {
+		fmt.Fprintln(os.Stderr, color.RedString("From cannot be empty."))
+		return false
+	}
+
+	if this.To == "" {
+		fmt.Fprintln(os.Stderr, color.RedString("To cannot be empty."))
+		return false
+	}
+
+	return true
 }
 
 func (this *Options) Echo() {
