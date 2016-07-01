@@ -6,7 +6,7 @@
 ## Example
 
 ```
-replace --dir=~/Code --file=*.php --from=protected --to=public
+replace -dir="~/Code" -file="*.php" -from="protected" -to="public"
 ```
 
 ## Help
@@ -14,5 +14,5 @@ replace --dir=~/Code --file=*.php --from=protected --to=public
 Run the following command for help.
 
 ```
-replace --help
+replace -help
 ```
