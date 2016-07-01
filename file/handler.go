@@ -42,6 +42,24 @@ func (this *Handler) handlePath(fullPath string) {
 	}
 }
 
+func (this *Handler) Walk() error {
+	return filepath.Walk(this.Options.Dir, func(fullPath string, info os.FileInfo, err error) error {
+
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		this.Group.Add(1)
+		go this.handlePath(fullPath)
+
+		return nil
+	})
+}
+
 func (this *Handler) processPath(fullPath string) {
 	defer this.Group.Done()
 
@@ -62,22 +80,4 @@ func (this *Handler) processPath(fullPath string) {
 
 		this.Output.Console <- fullPath
 	}
-}
-
-func (this *Handler) Walk() error {
-	return filepath.Walk(this.Options.Dir, func(fullPath string, info os.FileInfo, err error) error {
-
-		if err != nil {
-			return err
-		}
-
-		if info.IsDir() {
-			return nil
-		}
-
-		this.Group.Add(1)
-		go this.handlePath(fullPath)
-
-		return nil
-	})
 }

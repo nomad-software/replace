@@ -17,6 +17,17 @@ type Options struct {
 	Help bool
 }
 
+func (this *Options) Parse() {
+	flag.StringVar(&this.Dir, "dir", ".", "The directory to traverse.")
+	flag.StringVar(&this.From, "from", "", "The text to replace.")
+	flag.StringVar(&this.To, "to", "", "The replacement text.")
+	flag.StringVar(&this.File, "file", "*", "The glob file pattern to match.")
+	flag.BoolVar(&this.Help, "help", false, "Show help.")
+	flag.Parse()
+	dir, _ := homedir.Expand(this.Dir)
+	this.Dir = dir
+}
+
 func (this *Options) Valid() bool {
 
 	if this.From == "" {
@@ -42,17 +53,6 @@ func (this *Options) Echo() {
 	options += color.CyanString("starting in: ")
 	options += color.GreenString("%s\n", this.Dir)
 	fmt.Print(options)
-}
-
-func (this *Options) Parse() {
-	flag.StringVar(&this.Dir, "dir", ".", "The directory to traverse.")
-	flag.StringVar(&this.From, "from", "", "The text to replace.")
-	flag.StringVar(&this.To, "to", "", "The replacement text.")
-	flag.StringVar(&this.File, "file", "*", "The glob file pattern to match.")
-	flag.BoolVar(&this.Help, "help", false, "Show help.")
-	flag.Parse()
-	dir, _ := homedir.Expand(this.Dir)
-	this.Dir = dir
 }
 
 func (this *Options) Usage() {
