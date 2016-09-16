@@ -4,28 +4,37 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"regexp"
 
 	"github.com/fatih/color"
 	"github.com/mitchellh/go-homedir"
 )
 
 type Options struct {
-	Dir  string
-	From string
-	To   string
-	File string
-	Help bool
+	Case   bool
+	Dir    string
+	File   string
+	From   string
+	Help   bool
+	Ignore string
+	To     string
 }
 
-func (this *Options) Parse() {
-	flag.StringVar(&this.Dir, "dir", ".", "The directory to traverse.")
-	flag.StringVar(&this.From, "from", "", "The text to replace.")
-	flag.StringVar(&this.To, "to", "", "The replacement text.")
-	flag.StringVar(&this.File, "file", "*", "The glob file pattern to match.")
-	flag.BoolVar(&this.Help, "help", false, "Show help.")
+func ParseOptions() Options {
+	var opt Options
+
+	flag.BoolVar(&opt.Case, "case", false, "Use to switch to case sensitive matching.")
+	flag.StringVar(&opt.Dir, "dir", ".", "The directory to traverse.")
+	flag.StringVar(&opt.File, "file", "*", "The glob file pattern to match.")
+	flag.StringVar(&opt.From, "from", "", "The text to replace.")
+	flag.BoolVar(&opt.Help, "help", false, "Show help.")
+	flag.StringVar(&opt.Ignore, "ignore", "", "A regex to ignore files or directories.")
+	flag.StringVar(&opt.To, "to", "", "The replacement text.")
 	flag.Parse()
-	dir, _ := homedir.Expand(this.Dir)
-	this.Dir = dir
+
+	opt.Dir, _ = homedir.Expand(opt.Dir)
+
+	return opt
 }
 
 func (this *Options) Valid() bool {
@@ -40,19 +49,31 @@ func (this *Options) Valid() bool {
 		return false
 	}
 
+	err := this.compiles(this.Ignore)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, color.RedString("ignore pattern: %s", err.Error()))
+		return false
+	}
+
 	return true
 }
 
 func (this *Options) Echo() {
-	options := color.CyanString("replacing:   ")
-	options += color.GreenString("%s\n", this.From)
-	options += color.CyanString("with:        ")
-	options += color.GreenString("%s\n", this.To)
-	options += color.CyanString("in files:    ")
-	options += color.GreenString("%s\n", this.File)
-	options += color.CyanString("starting in: ")
-	options += color.GreenString("%s\n", this.Dir)
-	fmt.Print(options)
+	output := color.CyanString("replacing:   ")
+	output += color.GreenString("%s\n", this.From)
+	output += color.CyanString("with:        ")
+	output += color.GreenString("%s\n", this.To)
+	output += color.CyanString("in files:    ")
+	output += color.GreenString("%s\n", this.File)
+	output += color.CyanString("starting in: ")
+	output += color.GreenString("%s\n", this.Dir)
+
+	if this.Ignore != "" {
+		output += color.CyanString("ignoring:    ")
+		output += color.GreenString("%s\n", this.Ignore)
+	}
+
+	fmt.Print(output)
 }
 
 func (this *Options) Usage() {
@@ -66,4 +87,14 @@ func (this *Options) Usage() {
 `
 	color.Cyan(banner)
 	flag.Usage()
+}
+
+func (this *Options) compiles(pattern string) (err error) {
+	if this.Case {
+		_, err = regexp.Compile(pattern)
+	} else {
+		_, err = regexp.Compile("(?i)" + pattern)
+	}
+
+	return err
 }

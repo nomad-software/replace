@@ -2,11 +2,10 @@ package file
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
+	"regexp"
 	"sync"
 
 	"github.com/fatih/color"
@@ -14,36 +13,39 @@ import (
 )
 
 type Handler struct {
+	Group   *sync.WaitGroup
+	Ignore  *regexp.Regexp
 	Options *cli.Options
-	Group   sync.WaitGroup
-	Output  *cli.Output
+	Workers *WorkerQueue
 }
 
-func (this *Handler) Init(options *cli.Options) {
-	this.Options = options
-	this.Output = &cli.Output{
-		Console: make(chan string),
-		Closed:  make(chan bool),
-	}
-}
+func NewHandler(options *cli.Options) Handler {
+	var handler Handler
 
-func (this *Handler) handlePath(fullPath string) {
-	defer this.Group.Done()
+	handler.Group = new(sync.WaitGroup)
+	handler.Options = options
 
-	matched, err := filepath.Match(this.Options.File, path.Base(fullPath))
-	if err != nil {
-		fmt.Fprintln(os.Stderr, color.RedString(err.Error()))
-		return
+	if handler.Options.Ignore != "" {
+		handler.Ignore = handler.compile(handler.Options.Ignore)
 	}
 
-	if matched {
-		this.Group.Add(1)
-		go this.processPath(fullPath)
+	handler.Workers = &WorkerQueue{
+		Group:  handler.Group,
+		Input:  make(chan UnitOfWork),
+		Closed: make(chan bool),
+		Output: &cli.Output{
+			Console: make(chan string),
+			Closed:  make(chan bool),
+		},
 	}
+
+	return handler
 }
 
 func (this *Handler) Walk() error {
-	return filepath.Walk(this.Options.Dir, func(fullPath string, info os.FileInfo, err error) error {
+	go this.Workers.Start()
+
+	err := filepath.Walk(this.Options.Dir, func(fullPath string, info os.FileInfo, err error) error {
 
 		if err != nil {
 			return err
@@ -54,30 +56,46 @@ func (this *Handler) Walk() error {
 		}
 
 		this.Group.Add(1)
-		go this.handlePath(fullPath)
+		go this.matchPath(fullPath)
 
 		return nil
 	})
+
+	this.Group.Wait()
+	this.Workers.Close()
+
+	return err
 }
 
-func (this *Handler) processPath(fullPath string) {
+func (this *Handler) matchPath(fullPath string) {
 	defer this.Group.Done()
 
-	contents, err := ioutil.ReadFile(fullPath)
+	if this.Ignore != nil && this.Ignore.MatchString(fullPath) {
+		return
+	}
+
+	matched, err := filepath.Match(this.Options.File, path.Base(fullPath))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, color.RedString(err.Error()))
 		return
 	}
 
-	newContents := strings.Replace(string(contents), this.Options.From, this.Options.To, -1)
-	if newContents != string(contents) {
-
-		err = ioutil.WriteFile(fullPath, []byte(newContents), 0)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString(err.Error()))
-			return
+	if matched {
+		this.Group.Add(1)
+		this.Workers.Input <- UnitOfWork{
+			File: fullPath,
+			From: this.Options.From,
+			To:   this.Options.To,
 		}
-
-		this.Output.Console <- fullPath
 	}
+}
+
+func (this *Handler) compile(pattern string) (regex *regexp.Regexp) {
+	if this.Options.Case {
+		regex, _ = regexp.Compile(pattern)
+	} else {
+		regex, _ = regexp.Compile("(?i)" + pattern)
+	}
+
+	return regex
 }
