@@ -63,24 +63,6 @@ func (this *Options) Valid() bool {
 	return true
 }
 
-func (this *Options) Echo() {
-	output := color.CyanString("replacing:   ")
-	output += color.GreenString("%s\n", this.From)
-	output += color.CyanString("with:        ")
-	output += color.GreenString("%s\n", this.To)
-	output += color.CyanString("in files:    ")
-	output += color.GreenString("%s\n", this.File)
-	output += color.CyanString("starting in: ")
-	output += color.GreenString("%s\n", this.Dir)
-
-	if this.Ignore != "" {
-		output += color.CyanString("ignoring:    ")
-		output += color.GreenString("%s\n", this.Ignore)
-	}
-
-	fmt.Print(output)
-}
-
 func (this *Options) Usage() {
 	var banner string = ` ____            _
 |  _ \ ___ _ __ | | __ _  ___ ___
