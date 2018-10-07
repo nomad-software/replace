@@ -3,7 +3,6 @@ package file
 import (
 	"fmt"
 	"io/ioutil"
-	"os"
 	"strings"
 	"sync"
 
@@ -55,7 +54,7 @@ func (this *WorkerQueue) worker(death chan<- bool) {
 
 		contents, err := ioutil.ReadFile(work.File)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString(err.Error()))
+			fmt.Fprintln(cli.Stderr, color.RedString(err.Error()))
 			this.Group.Done()
 			continue
 		}
@@ -65,7 +64,7 @@ func (this *WorkerQueue) worker(death chan<- bool) {
 		if newContents != string(contents) {
 			err = ioutil.WriteFile(work.File, []byte(newContents), 0)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, color.RedString(err.Error()))
+				fmt.Fprintln(cli.Stderr, color.RedString(err.Error()))
 				this.Group.Done()
 				continue
 			}

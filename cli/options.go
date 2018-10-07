@@ -3,7 +3,6 @@ package cli
 import (
 	"flag"
 	"fmt"
-	"os"
 	"regexp"
 
 	"github.com/fatih/color"
@@ -45,18 +44,18 @@ func ParseOptions() Options {
 func (this *Options) Valid() bool {
 
 	if this.From == "" {
-		fmt.Fprintln(os.Stderr, color.RedString("From cannot be empty."))
+		fmt.Fprintln(Stderr, color.RedString("From cannot be empty."))
 		return false
 	}
 
 	if this.To == "" {
-		fmt.Fprintln(os.Stderr, color.RedString("To cannot be empty."))
+		fmt.Fprintln(Stderr, color.RedString("To cannot be empty."))
 		return false
 	}
 
 	err := this.compiles(this.Ignore)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, color.RedString("ignore pattern: %s", err.Error()))
+		fmt.Fprintln(Stderr, color.RedString("ignore pattern: %s", err.Error()))
 		return false
 	}
 
